@@ -115,9 +115,25 @@ Wait for Lick Response
         ↓                 ↓
            Inter-Trial Interval
 ```
+# Port Mapping Convention
+
+The task uses the following internal port mapping convention:
+
+| Bpod Event | Behavioral Side |
+|---|---|
+| `Port1In` | Right |
+| `Port2In` | Left |
+
+Internally:
+
+```text
+Port1 = Right choice
+Port2 = Left choice
+```
+---
 # Outputs
 
-## Online Outputs
+## Online 
 
 During task execution, the protocol displays real-time behavioral information including:
 
@@ -133,7 +149,7 @@ During task execution, the protocol displays real-time behavioral information in
 
 ---
 
-## Offline Outputs
+## Offline
 
 After experiment completion, the protocol generates:
 
