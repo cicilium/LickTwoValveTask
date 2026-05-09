@@ -1,0 +1,302 @@
+function Lick_twoValve
+global BpodSystem
+
+import zaber.motion.ascii.*
+import zaber.motion.*
+
+%%  ZABER SETUP 
+comPort = "COM3"; % Zaber actuator COM port
+conn = zaber.motion.ascii.Connection.openSerialPort(char(comPort));
+devices = conn.detectDevices();
+
+device = devices(1);
+axis_ml = device.getAxis(2);
+MLsettings = axis_ml.getSettings;
+
+conv_step2mm = 5249.340; % Zaber conversion factor: mm -> motor steps
+
+axis_ml.home();
+axis_ml.waitUntilIdle();
+
+num_repetition = 1;  % number of repetitions per distance condition
+
+closest = 45; 
+farthest = 5;
+num_distConditions = 9; % number of distance conditions
+
+responseWindow = 2; % allowed licking response time
+rewardTime = 2; % reward valve open duration
+punishTime = 5; % punishment timeout duration
+iti = 1; % inter-trial interval
+
+%% Log DISTANCE 
+logVals = logspace(0,1,num_distConditions);
+logVals = (logVals - min(logVals)) / (max(logVals) - min(logVals));
+
+distance = closest - logVals*(closest - farthest);
+distance = round(distance);
+
+dist_list = repmat(distance(:), num_repetition, 1);
+dist_list = dist_list(randperm(length(dist_list)));
+
+d = (max(distance) + min(distance)) / 2;
+maxTrials = length(dist_list);
+
+%%  BPOD INIT 
+BpodSystem.Data = struct;
+
+trialTypes = ones(1, maxTrials);
+
+outcomePlot = LiveOutcomePlot([1 2], {'Left','Right'}, trialTypes, maxTrials);
+outcomePlot.CorrectStateNames = {'Reward'};
+outcomePlot.RewardStateNames = {'Reward'};
+outcomePlot.PunishStateNames = {'Punishment'};
+
+drawnow;
+
+%% DATA 
+choice_history = nan(1, maxTrials);
+dist_history = nan(1, maxTrials);
+
+%%  MAIN LOOP 
+%LEFT  = Port2  RIGHT = Port1
+for trial = 1:maxTrials
+
+    cur_distance = dist_list(trial);
+
+    if cur_distance <= d
+        correctPort = 'Port2In';
+        wrongPort = 'Port1In';
+        correctValve = 2;
+        correctChoice = 0;
+        wrongChoice = 1;
+        trialTypes(trial) = 1;
+    else
+        correctPort = 'Port1In';
+        wrongPort = 'Port2In';
+        correctValve = 1;
+        correctChoice = 1;
+        wrongChoice = 0;
+        trialTypes(trial) = 2;
+    end
+
+    fprintf('\nTrial %d | dist=%d | correctValve=%d\n', ...
+        trial, cur_distance, correctValve);
+
+    %% ZABER MOVE 
+    axis_ml.home();
+    axis_ml.waitUntilIdle();
+
+    MLsettings.set('limit.max', cur_distance * conv_step2mm);
+    axis_ml.moveVelocity(20, Units.VELOCITY_MILLIMETRES_PER_SECOND);
+    axis_ml.waitUntilIdle();
+
+    %% STATE MACHINE
+    sma = NewStateMachine();
+
+    sma = AddState(sma, 'Name', 'Cue', ...
+        'Timer', 0.1, ...
+        'StateChangeConditions', {'Tup','WaitForLick'}, ...
+        'OutputActions', {'PWM1',255,'PWM2',255});
+
+    sma = AddState(sma, 'Name', 'WaitForLick', ...
+        'Timer', responseWindow, ...
+        'StateChangeConditions', { ...
+            correctPort,'Reward', ...
+            wrongPort,'Punishment', ...
+            'Tup','Punishment'}, ...
+        'OutputActions', {'PWM1',255,'PWM2',255});
+
+    sma = AddState(sma, 'Name', 'Reward', ...
+        'Timer', rewardTime, ...
+        'StateChangeConditions', {'Tup','ITI'}, ...
+        'OutputActions', {'ValveState', correctValve});
+
+    sma = AddState(sma, 'Name', 'Punishment', ...
+        'Timer', punishTime, ...
+        'StateChangeConditions', {'Tup','ITI'}, ...
+        'OutputActions', {});
+
+    sma = AddState(sma, 'Name', 'ITI', ...
+        'Timer', iti, ...
+        'StateChangeConditions', {'Tup','exit'}, ...
+        'OutputActions', {'PWM1',0,'PWM2',0});
+
+    %% RUN 
+    SendStateMachine(sma);
+    RawEvents = RunStateMachine;
+
+    %% LOG 
+    if ~isempty(fieldnames(RawEvents))
+
+        BpodSystem.Data = AddTrialEvents(BpodSystem.Data, RawEvents);
+        BpodSystem.Data.TrialTypes(trial) = trialTypes(trial);
+
+        SaveBpodSessionData;
+
+        outcomePlot.update(trialTypes(1:trial), BpodSystem.Data);
+        drawnow;
+
+        %% CHOICE DETECTION (
+        choice = nan;
+        events = BpodSystem.Data.RawEvents.Trial{trial}.Events;
+
+        if isfield(events, 'Port1In')
+            choice = 1;
+        elseif isfield(events, 'Port2In')
+            choice = 0;
+        else
+            choice = wrongChoice;
+        end
+
+        choice_history(trial) = choice;
+        dist_history(trial) = cur_distance;
+    end
+
+    HandlePauseCondition;
+
+    axis_ml.moveVelocity(-100, Units.VELOCITY_MILLIMETRES_PER_SECOND);
+    axis_ml.waitUntilIdle();
+    axis_ml.home();
+    axis_ml.waitUntilIdle();
+
+    if BpodSystem.Status.BeingUsed == 0
+        break;
+    end
+
+end
+
+%%  FINAL UPDATE (for saving)
+pause(0.2);
+SaveBpodSessionData;
+outcomePlot.update(trialTypes, BpodSystem.Data);
+drawnow;
+pause(0.5);
+
+%%  FINAL OUTCOME PLOT
+figure; hold on;
+
+for t = 1:length(choice_history)
+
+    if isnan(choice_history(t))
+        continue;
+    end
+
+    if choice_history(t) == 0
+        y = 1; % LEFT
+    else
+        y = 0; % RIGHT
+    end
+
+    if trialTypes(t)-1 == choice_history(t)
+        c = 'g';
+    else
+        c = 'r';
+    end
+
+    plot(t, y, 'o', ...
+        'MarkerFaceColor', c, ...
+        'MarkerEdgeColor', c, ...
+        'MarkerSize', 6);
+end
+
+yticks([0 1]);
+yticklabels({'Right','Left'});
+xlabel('Trial #');
+title('Final Outcome (Correct = green, Wrong = red)');
+ylim([-0.5 1.5]);
+grid on;
+
+saveas(gcf, fullfile(pwd, 'FinalOutcomePlot.png'));
+
+%%  PSYCHOMETRIC CURVE 
+valid = ~isnan(choice_history) & ~isnan(dist_history);
+
+dists = unique(dist_history(valid));
+pRight = nan(size(dists));
+
+for i = 1:length(dists)
+
+    idx = valid & dist_history == dists(i);
+
+    pRight(i) = mean(choice_history(idx) == 1);
+
+end
+
+figure;
+hold on;
+
+plot(dists, pRight, 'ko-', ...
+    'MarkerFaceColor', 'k', ...
+    'MarkerSize', 7, ...
+    'LineWidth', 1.5);
+
+xlabel('Zaber distance (mm)');
+ylabel('P(choose right / Port1)');
+title('Psychometric Curve');
+
+ylim([-0.05 1.05]);
+xlim([min(dists)-2, max(dists)+2]);
+
+grid on;
+
+%% ===== CONFUSION MATRIX =====
+valid = ~isnan(choice_history);
+
+trueChoice = trialTypes(valid) - 1;   % 0 = Left, 1 = Right
+predChoice = choice_history(valid);   % 0 = Left, 1 = Right
+
+LL = sum(trueChoice == 0 & predChoice == 0);
+LR = sum(trueChoice == 0 & predChoice == 1);
+RL = sum(trueChoice == 1 & predChoice == 0);
+RR = sum(trueChoice == 1 & predChoice == 1);
+
+N = length(predChoice);
+
+fprintf('\n===== CONFUSION MATRIX =====\n');
+
+fprintf('LL (Left -> Left):   %.1f%% (%d/%d)\n', ...
+    100*LL/N, LL, N);
+
+fprintf('LR (Left -> Right):  %.1f%% (%d/%d)\n', ...
+    100*LR/N, LR, N);
+
+fprintf('RL (Right -> Left):  %.1f%% (%d/%d)\n', ...
+    100*RL/N, RL, N);
+
+fprintf('RR (Right -> Right): %.1f%% (%d/%d)\n', ...
+    100*RR/N, RR, N);
+
+accuracy = (LL + RR) / N;
+
+precisionRight = RR / (RR + LR);
+recallRight = RR / (RR + RL);
+
+precisionLeft = LL / (LL + RL);
+recallLeft = LL / (LL + LR);
+
+fprintf('\n===== METRICS =====\n');
+
+fprintf('Accuracy: %.3f\n', accuracy);
+
+fprintf('Right Precision: %.3f\n', precisionRight);
+fprintf('Right Recall: %.3f\n', recallRight);
+
+fprintf('Left Precision: %.3f\n', precisionLeft);
+fprintf('Left Recall: %.3f\n', recallLeft);
+
+fprintf('\n');
+
+disp('Confusion Matrix:')
+disp(array2table( ...
+    [LL LR; RL RR], ...
+    'VariableNames', {'PredLeft','PredRight'}, ...
+    'RowNames', {'TrueLeft','TrueRight'}));
+
+%% ===== CLEANUP =====
+axis_ml.home();
+conn.close();
+
+disp('Experiment finished');
+
+end
