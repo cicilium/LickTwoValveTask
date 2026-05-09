@@ -132,21 +132,15 @@ Wait for Lick Response
 ---
 # Example Outputs
 
-## Live Outcome Plot
-
-Brief description of real-time trial outcome visualization.
-
-![Outcome Plot](figures/outcome_plot.png)
-
----
-
 ## Psychometric Curve
 
-Probability of rightward licking response as a function of wall position.
-
-![Psychometric Curve](figures/psychometric_curve.png)
+![Psychometric Curve](Screenshot%202026-05-09%20at%201.27.23%20AM.png)
 
 ---
+
+## Outcome Plot
+
+![Outcome Plot](Screenshot%202026-05-09%20at%201.28.13%20AM.png)
 
 
 ## Example Console Output
@@ -313,7 +307,6 @@ methods zaber.motion.ascii.Connection
 ```
 
 If successful, MATLAB will display the available Zaber connection methods.
-
 
 
 ---
