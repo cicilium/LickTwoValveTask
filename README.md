@@ -228,7 +228,7 @@ Example behavioral performance statistics generated during the task:
 
 ---
 
-## Experimental Setup (Optional)
+## Experimental Setup 
 
 Hardware setup including Bpod, Zaber actuator, lick ports, and reward system.
 
