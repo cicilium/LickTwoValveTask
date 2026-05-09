@@ -96,19 +96,6 @@ Make sure:
 
 ---
 
-# Online Outputs
-
-The task generates real-time behavioral analysis including:
-
-- Live outcome plots
-- Left/right response statistics
-- Psychometric curves
-- Confusion matrices
-- Accuracy metrics
-- Precision and recall statistics
-
----
-
 # Example Trial Flow
 
 ```text
@@ -128,20 +115,47 @@ Wait for Lick Response
         ↓                 ↓
            Inter-Trial Interval
 ```
+# Outputs
 
+## Online Outputs
+
+During task execution, the protocol displays real-time behavioral information including:
+
+- Trial number
+- Wall distance (`dist`)
+- Intended correct response/valve
+- Left/right trial outcome visualization using `SideOutcomePlot()`
+
+### Outcome Plot Color Convention
+
+- Green = correct response
+- Red = incorrect/missed response
+
+---
+
+## Offline Outputs
+
+After experiment completion, the protocol generates:
+
+- Confusion matrix
+- Accuracy metrics
+- Precision and recall statistics
+- Saved outcome plot
+- Saved psychometric curve
 ---
 # Example Outputs
 
-## Psychometric Curve
+## Outcome Plot
 
-![Psychometric Curve](Screenshot%202026-05-09%20at%201.27.23%20AM.png)
+![Outcome Plot](figures/SavedoutcomePlot.png)
 
 ---
 
-## Outcome Plot
+## Psychometric Curve
 
-![Outcome Plot](Screenshot%202026-05-09%20at%201.28.13%20AM.png)
+![Psychometric Curve](figures/psychometric_curve.png)
 
+---
 
 ## Example Console Output
 
@@ -202,6 +216,7 @@ Example behavioral performance statistics generated during the task:
 
 Hardware setup including Bpod, Zaber actuator, lick ports, and reward system.
 
+(will take pictures later)
 ![Setup](figures/setup.png)
 
 ---
@@ -313,7 +328,7 @@ If successful, MATLAB will display the available Zaber connection methods.
 
 ## Additional Notes
 
-- Ensure actuator is homed before task start
+- Ensure actuator is homed before task start!
 - Verify COM ports in Device Manager
 - Close previous serial connections before reconnecting
 - Avoid manually obstructing actuator movement
